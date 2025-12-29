@@ -93,39 +93,59 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-            Image Grid Cropper
-          </h1>
-          <p className="text-lg text-gray-600">
-            Upload an image and automatically crop it into a custom grid layout
-          </p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Column: Input and Original Image */}
-            <div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Choose an image file
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-colors duration-200"
-                />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Main Content Card */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          {/* Controls Section */}
+          <div className="bg-gradient-to-r from-indigo-50/50 to-blue-50/50 p-4 border-b border-gray-100">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* File Upload with Header */}
+              <div>
+                <div className="mb-3">
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+                    Image Grid Cropper
+                  </h1>
+                  <p className="text-xs text-gray-500">
+                    Upload & crop into grid
+                  </p>
+                </div>
               </div>
 
-              {/* Preset Grid Buttons */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              {/* Custom Grid Inputs */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    Columns
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={columns}
+                    onChange={(e) => setColumns(parseInt(e.target.value) || 1)}
+                    className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                    Rows
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={rows}
+                    onChange={(e) => setRows(parseInt(e.target.value) || 1)}
+                    className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Quick Presets
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {[
                     { cols: 1, rows: 1, label: "1×1" },
                     { cols: 2, rows: 2, label: "2×2" },
@@ -140,10 +160,10 @@ function App() {
                         setColumns(preset.cols);
                         setRows(preset.rows);
                       }}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                         columns === preset.cols && rows === preset.rows
-                          ? "bg-indigo-600 text-white shadow-md"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          ? "bg-indigo-600 text-white shadow-md scale-105"
+                          : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
                       }`}
                     >
                       {preset.label}
@@ -151,107 +171,120 @@ function App() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Columns
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={columns}
-                    onChange={(e) => {
-                      const newCols = parseInt(e.target.value) || 1;
-                      setColumns(newCols);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rows
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={rows}
-                    onChange={(e) => {
-                      const newRows = parseInt(e.target.value) || 1;
-                      setRows(newRows);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
+          {/* Content Area */}
+          <div className="p-4">
+            {isProcessing && (
+              <div className="text-center py-16">
+                <div className="inline-block animate-spin rounded-full h-10 w-10 border-3 border-indigo-200 border-t-indigo-600"></div>
+                <p className="mt-3 text-sm text-gray-600 font-medium">Processing image...</p>
               </div>
+            )}
 
-              {isProcessing && (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                  <p className="mt-2 text-gray-600">Processing image...</p>
-                </div>
-              )}
-
-              {originalImage && !isProcessing && (
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                    Original Image
-                  </h2>
-                  <div className="flex justify-center">
+            {!isProcessing && originalImage && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Original Image Preview */}
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-sm font-bold text-gray-700">Original</h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                        {originalImage.width} × {originalImage.height}
+                      </span>
+                      <input
+                        id="file-upload-change"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="file-upload-change"
+                        className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded cursor-pointer transition-all"
+                      >
+                        Change
+                      </label>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg overflow-hidden shadow-sm">
                     <img
                       src={originalImage.src}
                       alt="Original"
-                      className="max-w-full h-auto border-2 border-gray-200 rounded-lg shadow-lg"
+                      className="w-full h-auto"
                     />
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Right Column: Results and Download */}
-            <div>
-              {croppedImages.length > 0 && !isProcessing && (
-                <div>
-                  <div className="text-center mb-10">
-                    <button
-                      type="button"
-                      onClick={downloadZip}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
-                    >
-                      Download All Frames as ZIP
-                    </button>
-                  </div>
-
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                    Cropped Frames
-                  </h2>
-                  <div
-                    className={`grid grid-cols-${Math.min(columns, 4)} gap-4 mb-6`}
-                  >
-                    {croppedImages.map((src, i) => (
-                      <div
-                        key={i}
-                        className="relative bg-gray-50 rounded-lg p-2"
+                {/* Cropped Frames */}
+                {croppedImages.length > 0 && (
+                  <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-3 border border-indigo-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-sm font-bold text-gray-700">
+                        Cropped Frames ({croppedImages.length})
+                      </h2>
+                      <button
+                        onClick={downloadZip}
+                        className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
                       >
-                        <img
-                          src={src}
-                          alt={`Crop ${i + 1}`}
-                          className="w-full h-auto object-cover border rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200"
-                        />
-                        <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-sm font-bold px-2 py-1 rounded">
-                          {i + 1}
-                        </div>
+                        Download ZIP
+                      </button>
+                    </div>
+                    <div className="bg-white rounded-lg p-2 shadow-sm">
+                      <div
+                        className="grid gap-2"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.min(columns, 4)}, minmax(0, 1fr))`
+                        }}
+                      >
+                        {croppedImages.map((src, i) => (
+                          <div
+                            key={i}
+                            className="relative group bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-indigo-300 transition-all"
+                          >
+                            <img
+                              src={src}
+                              alt={`Crop ${i + 1}`}
+                              className="w-full h-auto"
+                            />
+                            <div className="absolute top-1.5 left-1.5 bg-indigo-600 text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-sm">
+                              {i + 1}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+                )}
+              </div>
+            )}
 
-        <div className="text-center text-gray-500 text-sm">
-          <p>Supported formats: JPG, PNG, GIF, WebP</p>
+            {!isProcessing && !originalImage && (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-3">
+                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-500 font-medium mb-3">Upload an image to get started</p>
+                <input
+                  id="file-upload-empty"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="file-upload-empty"
+                  className="inline-block text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg cursor-pointer transition-all shadow-sm hover:shadow-md active:scale-95"
+                >
+                  Choose Image
+                </label>
+                <p className="text-xs text-gray-400 mt-3">Supports JPG, PNG, GIF, WebP</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
