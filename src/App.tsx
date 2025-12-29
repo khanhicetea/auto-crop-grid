@@ -2,14 +2,20 @@ import JSZip from "jszip";
 import { Download, Image as ImageIcon, RefreshCw, Upload } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
+interface Preset {
+  cols: number;
+  rows: number;
+  label: string;
+}
+
 function App() {
-  const [originalImage, setOriginalImage] = useState(null);
-  const [croppedImages, setCroppedImages] = useState([]);
-  const [croppedDataURLs, setCroppedDataURLs] = useState([]);
-  const [originalFileName, setOriginalFileName] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [columns, setColumns] = useState(3);
-  const [rows, setRows] = useState(3);
+  const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
+  const [croppedImages, setCroppedImages] = useState<string[]>([]);
+  const [croppedDataURLs, setCroppedDataURLs] = useState<string[]>([]);
+  const [originalFileName, setOriginalFileName] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [columns, setColumns] = useState<number>(3);
+  const [rows, setRows] = useState<number>(3);
 
   // Auto-crop when originalImage, columns, or rows change
   useEffect(() => {
@@ -18,30 +24,35 @@ function App() {
     }
   }, [originalImage, columns, rows]);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       setOriginalFileName(file.name);
       setIsProcessing(true);
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          setOriginalImage(img);
-          setIsProcessing(false);
-        };
-        img.src = e.target.result;
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        const result = e.target?.result;
+        if (typeof result === "string") {
+          const img = new Image();
+          img.onload = () => {
+            setOriginalImage(img);
+            setIsProcessing(false);
+          };
+          img.src = result;
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const cropImage = (img, cols, rows) => {
+  const cropImage = (img: HTMLImageElement, cols: number, rows: number) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     const W = img.width;
     const H = img.height;
-    const crops = [];
+    const crops: string[] = [];
     const totalCrops = cols * rows;
 
     for (let i = 0; i < totalCrops; i++) {
@@ -64,9 +75,10 @@ function App() {
     setCroppedDataURLs(crops);
   };
 
-  const dataURLToBlob = (dataURL) => {
+  const dataURLToBlob = (dataURL: string): Blob => {
     const arr = dataURL.split(",");
-    const mime = arr[0].match(/:(.*?);/)[1];
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/png";
     const bstr = atob(arr[1]);
     let n = bstr.length;
     const u8arr = new Uint8Array(n);
@@ -92,6 +104,15 @@ function App() {
       URL.revokeObjectURL(url);
     });
   };
+
+  const presets: Preset[] = [
+    { cols: 1, rows: 1, label: "1×1" },
+    { cols: 2, rows: 2, label: "2×2" },
+    { cols: 3, rows: 3, label: "3×3" },
+    { cols: 4, rows: 4, label: "4×4" },
+    { cols: 2, rows: 3, label: "2×3" },
+    { cols: 3, rows: 4, label: "3×4" },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-4">
@@ -147,14 +168,7 @@ function App() {
                   Quick Presets
                 </label>
                 <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { cols: 1, rows: 1, label: "1×1" },
-                    { cols: 2, rows: 2, label: "2×2" },
-                    { cols: 3, rows: 3, label: "3×3" },
-                    { cols: 4, rows: 4, label: "4×4" },
-                    { cols: 2, rows: 3, label: "2×3" },
-                    { cols: 3, rows: 4, label: "3×4" },
-                  ].map((preset) => (
+                  {presets.map((preset) => (
                     <button
                       key={`${preset.cols}x${preset.rows}`}
                       onClick={() => {
