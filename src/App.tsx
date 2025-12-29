@@ -256,9 +256,16 @@ function App() {
                 {croppedImages.length > 0 && (
                   <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-100">
                     <div className="flex items-center justify-between mb-2">
-                      <h2 className="text-sm font-bold text-gray-700">
-                        Cropped Frames ({croppedImages.length})
-                      </h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-bold text-gray-700">
+                          Cropped Frames ({croppedImages.length})
+                        </h2>
+                        {originalImage && (
+                          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
+                            {Math.round(originalImage.width / columns)} × {Math.round(originalImage.height / rows)}
+                          </span>
+                        )}
+                      </div>
                       <button
                         onClick={downloadZip}
                         className="inline-flex items-center gap-1.5 text-xs font-semibold bg-black hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
@@ -274,30 +281,30 @@ function App() {
                           gridTemplateColumns: `repeat(${Math.min(columns, 4)}, minmax(0, 1fr))`,
                         }}
                       >
-                        {croppedImages.map((src, i) => (
-                          <div
-                            key={i}
-                            className="relative group bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-gray-400 transition-all"
-                          >
-                            <img
-                              src={src}
-                              alt={`Crop ${i + 1}`}
-                              className="w-full h-auto"
-                            />
-                            <div className="absolute top-1.5 left-1.5 bg-black text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-sm">
-                              {i + 1}
-                            </div>
-                            <button
-                              onClick={() =>
-                                downloadSingleImage(croppedDataURLs[i], i)
-                              }
-                              className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
-                              title="Download image"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                         {croppedImages.map((src, i) => (
+                           <div
+                             key={i}
+                             className="relative group bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-gray-400 transition-all"
+                           >
+                             <img
+                               src={src}
+                               alt={`Crop ${i + 1}`}
+                               className="w-full h-auto"
+                             />
+                             <div className="absolute top-1.5 left-1.5 bg-black text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-sm">
+                               {i + 1}
+                             </div>
+                             <button
+                               onClick={() =>
+                                 downloadSingleImage(croppedDataURLs[i], i)
+                               }
+                               className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
+                               title="Download image"
+                             >
+                               <Download className="w-3.5 h-3.5" />
+                             </button>
+                           </div>
+                         ))}
                       </div>
                     </div>
                   </div>
