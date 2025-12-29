@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { Download, Image as ImageIcon, RefreshCw, Upload } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface Preset {
   cols: number;
@@ -20,38 +20,10 @@ function App() {
   const [columns, setColumns] = useState<number>(3);
   const [rows, setRows] = useState<number>(3);
 
-  // Auto-crop when originalImage, columns, or rows change
-  useEffect(() => {
-    if (originalImage) {
-      cropImage(originalImage, columns, rows);
-    }
-  }, [originalImage, columns, rows]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setOriginalFileName(file.name);
-      setIsProcessing(true);
-      const reader = new FileReader();
-      reader.onload = (e: ProgressEvent<FileReader>) => {
-        const result = e.target?.result;
-        if (typeof result === "string") {
-          const img = new Image();
-          img.onload = () => {
-            setOriginalImage(img);
-            setIsProcessing(false);
-          };
-          img.src = result;
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const cropImage = (img: HTMLImageElement, cols: number, rows: number) => {
+  const cropImage = useCallback((img: HTMLImageElement, cols: number, rows: number): string[] => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return [];
 
     const W = img.width;
     const H = img.height;
@@ -74,8 +46,37 @@ function App() {
       crops.push(canvas.toDataURL());
     }
 
-    setCroppedImages(crops);
-    setCroppedDataURLs(crops);
+    return crops;
+  }, []);
+
+  // Auto-crop when originalImage, columns, or rows change
+  useEffect(() => {
+    if (originalImage) {
+      const crops = cropImage(originalImage, columns, rows);
+      setCroppedImages(crops);
+      setCroppedDataURLs(crops);
+    }
+  }, [originalImage, columns, rows, cropImage]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setOriginalFileName(file.name);
+      setIsProcessing(true);
+      const reader = new FileReader();
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        const result = e.target?.result;
+        if (typeof result === "string") {
+          const img = new Image();
+          img.onload = () => {
+            setOriginalImage(img);
+            setIsProcessing(false);
+          };
+          img.src = result;
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const dataURLToBlob = (dataURL: string): Blob => {
