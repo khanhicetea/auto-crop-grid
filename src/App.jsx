@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { Download, Image as ImageIcon, RefreshCw, Upload } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 function App() {
@@ -7,8 +8,8 @@ function App() {
   const [croppedDataURLs, setCroppedDataURLs] = useState([]);
   const [originalFileName, setOriginalFileName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [columns, setColumns] = useState(2);
-  const [rows, setRows] = useState(2);
+  const [columns, setColumns] = useState(3);
+  const [rows, setRows] = useState(3);
 
   // Auto-crop when originalImage, columns, or rows change
   useEffect(() => {
@@ -179,7 +180,9 @@ function App() {
             {isProcessing && (
               <div className="text-center py-16">
                 <div className="inline-block animate-spin rounded-full h-10 w-10 border-3 border-indigo-200 border-t-indigo-600"></div>
-                <p className="mt-3 text-sm text-gray-600 font-medium">Processing image...</p>
+                <p className="mt-3 text-sm text-gray-600 font-medium">
+                  Processing image...
+                </p>
               </div>
             )}
 
@@ -188,7 +191,9 @@ function App() {
                 {/* Original Image Preview */}
                 <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-sm font-bold text-gray-700">Original</h2>
+                    <h2 className="text-sm font-bold text-gray-700">
+                      Original
+                    </h2>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
                         {originalImage.width} × {originalImage.height}
@@ -202,8 +207,9 @@ function App() {
                       />
                       <label
                         htmlFor="file-upload-change"
-                        className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded cursor-pointer transition-all"
+                        className="inline-flex items-center gap-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded cursor-pointer transition-all"
                       >
+                        <RefreshCw className="w-3 h-3" />
                         Change
                       </label>
                     </div>
@@ -226,8 +232,9 @@ function App() {
                       </h2>
                       <button
                         onClick={downloadZip}
-                        className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
                       >
+                        <Download className="w-3.5 h-3.5" />
                         Download ZIP
                       </button>
                     </div>
@@ -235,7 +242,7 @@ function App() {
                       <div
                         className="grid gap-2"
                         style={{
-                          gridTemplateColumns: `repeat(${Math.min(columns, 4)}, minmax(0, 1fr))`
+                          gridTemplateColumns: `repeat(${Math.min(columns, 4)}, minmax(0, 1fr))`,
                         }}
                       >
                         {croppedImages.map((src, i) => (
@@ -263,11 +270,11 @@ function App() {
             {!isProcessing && !originalImage && (
               <div className="text-center py-16">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-3">
-                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                  <ImageIcon className="w-8 h-8 text-indigo-600" />
                 </div>
-                <p className="text-sm text-gray-500 font-medium mb-3">Upload an image to get started</p>
+                <p className="text-sm text-gray-500 font-medium mb-3">
+                  Upload an image to get started
+                </p>
                 <input
                   id="file-upload-empty"
                   type="file"
@@ -277,11 +284,14 @@ function App() {
                 />
                 <label
                   htmlFor="file-upload-empty"
-                  className="inline-block text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg cursor-pointer transition-all shadow-sm hover:shadow-md active:scale-95"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg cursor-pointer transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
+                  <Upload className="w-4 h-4" />
                   Choose Image
                 </label>
-                <p className="text-xs text-gray-400 mt-3">Supports JPG, PNG, GIF, WebP</p>
+                <p className="text-xs text-gray-400 mt-3">
+                  Supports JPG, PNG, GIF, WebP
+                </p>
               </div>
             )}
           </div>
