@@ -1,6 +1,6 @@
+import { Download, RefreshCw, Scissors, Upload } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, RefreshCw, Scissors, Upload } from "lucide-react";
 
 interface RatioPreset {
   ratio: number;
@@ -12,9 +12,12 @@ interface SingleCropToolProps {
   initialFileName?: string;
 }
 
-export function SingleCropTool({ initialImage, initialFileName }: SingleCropToolProps) {
+export function SingleCropTool({
+  initialImage,
+  initialFileName,
+}: SingleCropToolProps) {
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(
-    null
+    null,
   );
   const [originalFileName, setOriginalFileName] = useState<string>("");
   const [originalDataURL, setOriginalDataURL] = useState<string>("");
@@ -32,6 +35,7 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [boxStart, setBoxStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [cropResult, setCropResult] = useState<string | null>(null);
+  const [showRuleOfThirds, setShowRuleOfThirds] = useState(true);
 
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -151,9 +155,21 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
       { name: "nw", x: cropBox.x, y: cropBox.y },
       { name: "n", x: cropBox.x + cropBox.width / 2, y: cropBox.y },
       { name: "ne", x: cropBox.x + cropBox.width, y: cropBox.y },
-      { name: "e", x: cropBox.x + cropBox.width, y: cropBox.y + cropBox.height / 2 },
-      { name: "se", x: cropBox.x + cropBox.width, y: cropBox.y + cropBox.height },
-      { name: "s", x: cropBox.x + cropBox.width / 2, y: cropBox.y + cropBox.height },
+      {
+        name: "e",
+        x: cropBox.x + cropBox.width,
+        y: cropBox.y + cropBox.height / 2,
+      },
+      {
+        name: "se",
+        x: cropBox.x + cropBox.width,
+        y: cropBox.y + cropBox.height,
+      },
+      {
+        name: "s",
+        x: cropBox.x + cropBox.width / 2,
+        y: cropBox.y + cropBox.height,
+      },
       { name: "sw", x: cropBox.x, y: cropBox.y + cropBox.height },
       { name: "w", x: cropBox.x, y: cropBox.y + cropBox.height / 2 },
     ];
@@ -209,7 +225,10 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
       let newY = boxStart.y + dy;
 
       newX = Math.max(0, Math.min(newX, originalImage.width - boxStart.width));
-      newY = Math.max(0, Math.min(newY, originalImage.height - boxStart.height));
+      newY = Math.max(
+        0,
+        Math.min(newY, originalImage.height - boxStart.height),
+      );
 
       setCropBox({
         ...cropBox,
@@ -283,7 +302,10 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
       newX = Math.max(0, Math.min(newX, originalImage.width - newWidth));
       newY = Math.max(0, Math.min(newY, originalImage.height - newHeight));
       newWidth = Math.max(50, Math.min(newWidth, originalImage.width - newX));
-      newHeight = Math.max(50, Math.min(newHeight, originalImage.height - newY));
+      newHeight = Math.max(
+        50,
+        Math.min(newHeight, originalImage.height - newY),
+      );
 
       setCropBox({
         x: newX,
@@ -319,7 +341,7 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
       0,
       0,
       cropBox.width,
-      cropBox.height
+      cropBox.height,
     );
 
     setCropResult(canvas.toDataURL());
@@ -349,14 +371,18 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
   return (
     <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200 mt-4">
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-gray-800 mb-1">Single Crop Tool</h2>
+        <h2 className="text-lg font-bold text-gray-800 mb-1">
+          Single Crop Tool
+        </h2>
         <p className="text-xs text-gray-500">Drag & resize to crop a region</p>
       </div>
 
       {isProcessing && (
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-3 border-gray-200 border-t-gray-600"></div>
-          <p className="mt-3 text-sm text-gray-600 font-medium">Processing image...</p>
+          <p className="mt-3 text-sm text-gray-600 font-medium">
+            Processing image...
+          </p>
         </div>
       )}
 
@@ -382,7 +408,9 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
             <Upload className="w-4 h-4" />
             Choose Image
           </label>
-          <p className="text-xs text-gray-400 mt-3">Supports JPG, PNG, GIF, WebP</p>
+          <p className="text-xs text-gray-400 mt-3">
+            Supports JPG, PNG, GIF, WebP
+          </p>
         </div>
       )}
 
@@ -407,8 +435,20 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
           <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white rounded-lg p-3 shadow-sm">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-gray-700">Source Image</h3>
+                <h3 className="text-sm font-bold text-gray-700">
+                  Source Image
+                </h3>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowRuleOfThirds(!showRuleOfThirds)}
+                    className={`text-xs font-semibold px-2 py-1 rounded transition-all ${
+                      showRuleOfThirds
+                        ? "bg-black text-white"
+                        : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                    }`}
+                  >
+                    Grid
+                  </button>
                   <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                     {originalImage.width} × {originalImage.height}
                   </span>
@@ -461,6 +501,49 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
                   <div className="absolute bottom-0 left-0 w-4 h-4 border-2 border-white bg-black/50 -translate-x-1/2 translate-y-1/2 cursor-sw-resize rounded-full" />
                   <div className="absolute top-1/2 left-0 w-4 h-4 border-2 border-white bg-black/50 -translate-x-1/2 -translate-y-1/2 cursor-w-resize rounded-full" />
                   <div className="absolute top-1/2 left-1/2 w-4 h-4 border-2 border-white bg-black/50 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full" />
+                  {showRuleOfThirds && (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      style={{ overflow: "visible" }}
+                    >
+                      <line
+                        x1="33.33%"
+                        y1="0%"
+                        x2="33.33%"
+                        y2="100%"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeDasharray="4,4"
+                      />
+                      <line
+                        x1="66.67%"
+                        y1="0%"
+                        x2="66.67%"
+                        y2="100%"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeDasharray="4,4"
+                      />
+                      <line
+                        x1="0%"
+                        y1="33.33%"
+                        x2="100%"
+                        y2="33.33%"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeDasharray="4,4"
+                      />
+                      <line
+                        x1="0%"
+                        y1="66.67%"
+                        x2="100%"
+                        y2="66.67%"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeDasharray="4,4"
+                      />
+                    </svg>
+                  )}
                 </div>
               </div>
             </div>
@@ -468,7 +551,9 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
             <div className="bg-white rounded-lg p-3 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-gray-700">Cropped Result</h3>
+                  <h3 className="text-sm font-bold text-gray-700">
+                    Cropped Result
+                  </h3>
                   <span className="text-xs font-mono bg-gray-100 text-gray-700 px-2 py-1 rounded">
                     {Math.round(cropBox.width)} × {Math.round(cropBox.height)}
                   </span>
@@ -491,7 +576,9 @@ export function SingleCropTool({ initialImage, initialFileName }: SingleCropTool
                 />
               ) : (
                 <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                  <span className="text-gray-400 text-sm">No preview available</span>
+                  <span className="text-gray-400 text-sm">
+                    No preview available
+                  </span>
                 </div>
               )}
             </div>
