@@ -1,10 +1,15 @@
+import JSZip from "jszip";
+import { Download, RefreshCw, Scissors, Upload } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Download, RefreshCw, Scissors, Upload } from "lucide-react";
-import JSZip from "jszip";
 
 interface GridToolProps {
   onUseImage?: (dataURL: string, fileName: string) => void;
+}
+
+interface PaddingInfo {
+  size: number;
+  detected: boolean;
 }
 
 interface Preset {
@@ -15,7 +20,7 @@ interface Preset {
 
 export function GridTool({ onUseImage }: GridToolProps) {
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(
-    null
+    null,
   );
   const [croppedImages, setCroppedImages] = useState<string[]>([]);
   const [croppedDataURLs, setCroppedDataURLs] = useState<string[]>([]);
@@ -23,6 +28,11 @@ export function GridTool({ onUseImage }: GridToolProps) {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [columns, setColumns] = useState<number>(3);
   const [rows, setRows] = useState<number>(3);
+  const [autoPadding, setAutoPadding] = useState<boolean>(false);
+  const [paddingInfo, setPaddingInfo] = useState<PaddingInfo>({
+    size: 0,
+    detected: false,
+  });
 
   const presets: Preset[] = [
     { cols: 1, rows: 1, label: "1×1" },
@@ -33,55 +43,200 @@ export function GridTool({ onUseImage }: GridToolProps) {
     { cols: 3, rows: 4, label: "3×4" },
   ];
 
-  const cropImage = useCallback(
-    (img: HTMLImageElement, cols: number, rows: number): string[] => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return [];
+  /**
+   * Detects the white space padding size between frames in a grid image.
+   * Scans for vertical and horizontal white lines (gutters) within the image.
+   * Works for grids with padding BETWEEN frames, not just on outer edges.
+   */
+  const detectPadding = (img: HTMLImageElement): number => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
 
-      const W = img.width;
-      const H = img.height;
-      const crops: string[] = [];
-      const totalCrops = cols * rows;
+    const maxScanSize = 900;
+    const scale = Math.min(1, maxScanSize / Math.max(img.width, img.height));
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      for (let i = 0; i < totalCrops; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const quad = {
-          x: col * (W / cols),
-          y: row * (H / rows),
-          w: W / cols,
-          h: H / rows,
-        };
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
 
-        canvas.width = quad.w;
-        canvas.height = quad.h;
-        ctx.drawImage(
-          img,
-          quad.x,
-          quad.y,
-          quad.w,
-          quad.h,
-          0,
-          0,
-          quad.w,
-          quad.h
-        );
-        crops.push(canvas.toDataURL());
+    // White threshold (allowing slight variations)
+    const whiteThreshold = 250;
+
+    // Helper to check if a pixel is white
+    const isWhite = (x: number, y: number): boolean => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return true;
+      const i = (y * width + x) * 4;
+      return (
+        data[i] >= whiteThreshold &&
+        data[i + 1] >= whiteThreshold &&
+        data[i + 2] >= whiteThreshold
+      );
+    };
+
+    // Detect vertical white lines (gutters between columns)
+    const detectVerticalGaps = (): Set<number> => {
+      const gaps = new Set<number>();
+
+      // Scan multiple horizontal lines
+      for (const scanY of [
+        Math.floor(height * 0.1),
+        Math.floor(height * 0.5),
+        Math.floor(height * 0.9),
+      ]) {
+        let inGap = false;
+        let gapStart = -1;
+
+        for (let x = 1; x < width - 1; x++) {
+          const white = isWhite(x, scanY);
+
+          if (white && !inGap) {
+            // Start of potential gap
+            inGap = true;
+            gapStart = x;
+          } else if (!white && inGap) {
+            // End of gap
+            inGap = false;
+            const gapSize = x - gapStart;
+            // Only count gaps that are at least 1px and less than 20% of image width
+            if (gapSize >= 1 && gapSize < width * 0.2) {
+              gaps.add(gapSize);
+            }
+          }
+        }
       }
+      return gaps;
+    };
 
-      return crops;
-    },
-    []
-  );
+    // Detect horizontal white lines (gutters between rows)
+    const detectHorizontalGaps = (): Set<number> => {
+      const gaps = new Set<number>();
+
+      // Scan multiple vertical lines
+      for (const scanX of [
+        Math.floor(width * 0.1),
+        Math.floor(width * 0.5),
+        Math.floor(width * 0.9),
+      ]) {
+        let inGap = false;
+        let gapStart = -1;
+
+        for (let y = 1; y < height - 1; y++) {
+          const white = isWhite(scanX, y);
+
+          if (white && !inGap) {
+            // Start of potential gap
+            inGap = true;
+            gapStart = y;
+          } else if (!white && inGap) {
+            // End of gap
+            inGap = false;
+            const gapSize = y - gapStart;
+            // Only count gaps that are at least 1px and less than 20% of image height
+            if (gapSize >= 1 && gapSize < height * 0.2) {
+              gaps.add(gapSize);
+            }
+          }
+        }
+      }
+      return gaps;
+    };
+
+    const vGaps = detectVerticalGaps();
+    const hGaps = detectHorizontalGaps();
+
+    // Find the most common gap size (mode)
+    const allGaps = [...vGaps, ...hGaps];
+    if (allGaps.length === 0) return 0;
+
+    // Count frequency of each gap size (rounding to nearest 2px to account for scaling artifacts)
+    const frequency = new Map<number, number>();
+    for (const gap of allGaps) {
+      const rounded = Math.round(gap / 2) * 2;
+      frequency.set(rounded, (frequency.get(rounded) || 0) + 1);
+    }
+
+    // Find the most frequent gap size
+    let maxFreq = 0;
+    let mostCommonGap = 0;
+    for (const [size, freq] of frequency) {
+      if (freq > maxFreq) {
+        maxFreq = freq;
+        mostCommonGap = size;
+      }
+    }
+
+    // Scale back to original image dimensions
+    return Math.round(mostCommonGap / scale);
+  };
+
+  const cropImage = (
+    img: HTMLImageElement,
+    cols: number,
+    rows: number,
+    padding: number = 0,
+  ): string[] => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return [];
+
+    const W = img.width;
+    const H = img.height;
+    const crops: string[] = [];
+    const totalCrops = cols * rows;
+
+    // Calculate cell dimensions without padding
+    // The grid has (cols + 1) vertical padding strips and (rows + 1) horizontal
+    // But the outer edge may or may not have padding, so we calculate based on total space
+    const cellWidth = (W - padding * (cols - 1)) / cols;
+    const cellHeight = (H - padding * (rows - 1)) / rows;
+
+    for (let i = 0; i < totalCrops; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+
+      // Calculate position accounting for padding between cells
+      const x = col * (cellWidth + padding);
+      const y = row * (cellHeight + padding);
+
+      const quad = {
+        x,
+        y,
+        w: cellWidth,
+        h: cellHeight,
+      };
+
+      canvas.width = quad.w;
+      canvas.height = quad.h;
+      ctx.drawImage(img, quad.x, quad.y, quad.w, quad.h, 0, 0, quad.w, quad.h);
+      crops.push(canvas.toDataURL());
+    }
+
+    return crops;
+  };
+
+  // Auto-detect padding when image or auto-padding setting changes
+  useEffect(() => {
+    if (originalImage && autoPadding) {
+      const detectedSize = detectPadding(originalImage);
+      setPaddingInfo({ size: detectedSize, detected: true });
+    } else {
+      setPaddingInfo({ size: 0, detected: false });
+    }
+  }, [originalImage, autoPadding, detectPadding]);
 
   useEffect(() => {
     if (originalImage) {
-      const crops = cropImage(originalImage, columns, rows);
+      const padding = autoPadding ? paddingInfo.size : 0;
+      const crops = cropImage(originalImage, columns, rows, padding);
       setCroppedImages(crops);
       setCroppedDataURLs(crops);
     }
-  }, [originalImage, columns, rows, cropImage]);
+  }, [originalImage, columns, rows, cropImage, autoPadding, paddingInfo.size]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -205,6 +360,29 @@ export function GridTool({ onUseImage }: GridToolProps) {
             />
           </div>
         </div>
+        <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoPadding}
+              onChange={(e) => setAutoPadding(e.target.checked)}
+              className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black focus:ring-2"
+            />
+            <span className="text-xs font-semibold text-gray-700 px-2 py-1 ">
+              Auto-detect whitespace paddings
+            </span>
+            {paddingInfo.detected && paddingInfo.size > 0 && (
+              <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                {paddingInfo.size}px
+              </div>
+            )}
+            {paddingInfo.detected && paddingInfo.size === 0 && (
+              <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                No padding
+              </div>
+            )}
+          </label>
+        </div>
       </div>
 
       {isProcessing && (
@@ -287,20 +465,25 @@ export function GridTool({ onUseImage }: GridToolProps) {
                     <div className="absolute top-1.5 left-1.5 bg-black text-white text-xs font-bold px-1.5 py-0.5 rounded shadow-sm">
                       {i + 1}
                     </div>
-                      <button
-                        onClick={() => downloadSingleImage(croppedDataURLs[i], i)}
-                        className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
-                        title="Download image"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => onUseImage?.(croppedDataURLs[i], `${originalFileName.replace(/\.[^/.]+$/, "")}-${i + 1}.png`)}
-                        className="absolute top-1.5 right-10 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
-                        title="Use in Single Crop"
-                      >
-                        <Scissors className="w-3.5 h-3.5" />
-                      </button>
+                    <button
+                      onClick={() => downloadSingleImage(croppedDataURLs[i], i)}
+                      className="absolute top-1.5 right-1.5 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
+                      title="Download image"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() =>
+                        onUseImage?.(
+                          croppedDataURLs[i],
+                          `${originalFileName.replace(/\.[^/.]+$/, "")}-${i + 1}.png`,
+                        )
+                      }
+                      className="absolute top-1.5 right-10 bg-white/90 hover:bg-white text-black p-1 rounded shadow-sm hover:shadow-md transition-all"
+                      title="Use in Single Crop"
+                    >
+                      <Scissors className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -331,7 +514,9 @@ export function GridTool({ onUseImage }: GridToolProps) {
             <Upload className="w-4 h-4" />
             Choose Image
           </label>
-          <p className="text-xs text-gray-400 mt-3">Supports JPG, PNG, GIF, WebP</p>
+          <p className="text-xs text-gray-400 mt-3">
+            Supports JPG, PNG, GIF, WebP
+          </p>
         </div>
       )}
     </div>
