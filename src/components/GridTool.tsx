@@ -1,7 +1,15 @@
 import JSZip from "jszip";
 import { Download, RefreshCw, Scissors, Upload } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  CropImageError,
+  CropImageRequest,
+  CropImageResponse,
+  DetectPaddingError,
+  DetectPaddingRequest,
+  DetectPaddingResponse,
+} from "../workers/types";
 
 interface GridToolProps {
   onUseImage?: (dataURL: string, fileName: string) => void;
@@ -34,209 +42,280 @@ export function GridTool({ onUseImage }: GridToolProps) {
     detected: false,
   });
 
+  // Worker state
+  const detectPaddingWorker = useRef<Worker | null>(null);
+  const cropImageWorker = useRef<Worker | null>(null);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [offscreenCanvasSupported, setOffscreenCanvasSupported] =
+    useState(true);
+
   const presets: Preset[] = [
     { cols: 1, rows: 1, label: "1×1" },
     { cols: 2, rows: 2, label: "2×2" },
     { cols: 3, rows: 3, label: "3×3" },
     { cols: 4, rows: 4, label: "4×4" },
+    { cols: 5, rows: 5, label: "5×5" },
     { cols: 2, rows: 3, label: "2×3" },
     { cols: 3, rows: 4, label: "3×4" },
   ];
 
   /**
-   * Detects the white space padding size between frames in a grid image.
-   * Scans for vertical and horizontal white lines (gutters) within the image.
-   * Works for grids with padding BETWEEN frames, not just on outer edges.
+   * Detect padding using Web Worker with OffscreenCanvas
    */
-  const detectPadding = (img: HTMLImageElement): number => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return 0;
+  const detectPaddingWithWorker = useCallback(
+    (img: HTMLImageElement): Promise<number> => {
+      return new Promise((resolve, reject) => {
+        if (!detectPaddingWorker.current) {
+          reject(new Error("Detect padding worker not initialized"));
+          return;
+        }
 
-    const maxScanSize = 900;
-    const scale = Math.min(1, maxScanSize / Math.max(img.width, img.height));
-    canvas.width = img.width * scale;
-    canvas.height = img.height * scale;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Convert HTMLImageElement to ImageBitmap (transferable)
+        createImageBitmap(img)
+          .then((imageBitmap) => {
+            // Set up one-time message handler
+            const handler = (event: MessageEvent) => {
+              const message = event.data as
+                | DetectPaddingResponse
+                | DetectPaddingError;
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const width = canvas.width;
-    const height = canvas.height;
+              if (message.type === "detect-padding-result") {
+                detectPaddingWorker.current?.removeEventListener(
+                  "message",
+                  handler,
+                );
+                resolve(message.paddingSize);
+              } else if (message.type === "detect-padding-error") {
+                detectPaddingWorker.current?.removeEventListener(
+                  "message",
+                  handler,
+                );
+                reject(new Error(message.error));
+              }
+            };
 
-    // White threshold (allowing slight variations)
-    const whiteThreshold = 250;
+            detectPaddingWorker.current.addEventListener("message", handler);
 
-    // Helper to check if a pixel is white
-    const isWhite = (x: number, y: number): boolean => {
-      if (x < 0 || x >= width || y < 0 || y >= height) return true;
-      const i = (y * width + x) * 4;
-      return (
-        data[i] >= whiteThreshold &&
-        data[i + 1] >= whiteThreshold &&
-        data[i + 2] >= whiteThreshold
+            // Send request to worker
+            const request: DetectPaddingRequest = {
+              type: "detect-padding",
+              imageData: {
+                imageBitmap,
+                originalWidth: img.width,
+                originalHeight: img.height,
+              },
+            };
+
+            // Transfer the ImageBitmap (zero-copy)
+            detectPaddingWorker.current.postMessage(request, [imageBitmap]);
+          })
+          .catch(reject);
+      });
+    },
+    [],
+  );
+
+  /**
+   * Crop image using Web Worker with OffscreenCanvas
+   */
+  const cropImageWithWorker = useCallback(
+    (
+      img: HTMLImageElement,
+      cols: number,
+      rows: number,
+      padding: number,
+    ): Promise<string[]> => {
+      return new Promise((resolve, reject) => {
+        if (!cropImageWorker.current) {
+          reject(new Error("Crop image worker not initialized"));
+          return;
+        }
+
+        // Convert to ImageBitmap
+        createImageBitmap(img)
+          .then((imageBitmap) => {
+            const handler = (event: MessageEvent) => {
+              const message = event.data as CropImageResponse | CropImageError;
+
+              if (message.type === "crop-image-result") {
+                cropImageWorker.current?.removeEventListener(
+                  "message",
+                  handler,
+                );
+                resolve(message.croppedDataURLs);
+              } else if (message.type === "crop-image-error") {
+                cropImageWorker.current?.removeEventListener(
+                  "message",
+                  handler,
+                );
+                reject(new Error(message.error));
+              }
+            };
+
+            cropImageWorker.current.addEventListener("message", handler);
+
+            const request: CropImageRequest = {
+              type: "crop-image",
+              imageData: {
+                imageBitmap,
+                originalWidth: img.width,
+                originalHeight: img.height,
+              },
+              gridConfig: {
+                cols,
+                rows,
+                padding,
+              },
+            };
+
+            // Transfer the ImageBitmap
+            cropImageWorker.current.postMessage(request, [imageBitmap]);
+          })
+          .catch(reject);
+      });
+    },
+    [],
+  );
+
+  // Initialize workers and check browser compatibility
+  useEffect(() => {
+    // Check if OffscreenCanvas is supported
+    if (typeof OffscreenCanvas === "undefined") {
+      setOffscreenCanvasSupported(false);
+      setWorkerError(
+        "OffscreenCanvas is not supported in this browser. Please use a modern browser (Chrome 69+, Firefox 105+, Safari 16.4+).",
       );
-    };
-
-    // Detect vertical white lines (gutters between columns)
-    const detectVerticalGaps = (): Set<number> => {
-      const gaps = new Set<number>();
-
-      // Scan multiple horizontal lines
-      for (const scanY of [
-        Math.floor(height * 0.1),
-        Math.floor(height * 0.5),
-        Math.floor(height * 0.9),
-      ]) {
-        let inGap = false;
-        let gapStart = -1;
-
-        for (let x = 1; x < width - 1; x++) {
-          const white = isWhite(x, scanY);
-
-          if (white && !inGap) {
-            // Start of potential gap
-            inGap = true;
-            gapStart = x;
-          } else if (!white && inGap) {
-            // End of gap
-            inGap = false;
-            const gapSize = x - gapStart;
-            // Only count gaps that are at least 1px and less than 20% of image width
-            if (gapSize >= 1 && gapSize < width * 0.2) {
-              gaps.add(gapSize);
-            }
-          }
-        }
-      }
-      return gaps;
-    };
-
-    // Detect horizontal white lines (gutters between rows)
-    const detectHorizontalGaps = (): Set<number> => {
-      const gaps = new Set<number>();
-
-      // Scan multiple vertical lines
-      for (const scanX of [
-        Math.floor(width * 0.1),
-        Math.floor(width * 0.5),
-        Math.floor(width * 0.9),
-      ]) {
-        let inGap = false;
-        let gapStart = -1;
-
-        for (let y = 1; y < height - 1; y++) {
-          const white = isWhite(scanX, y);
-
-          if (white && !inGap) {
-            // Start of potential gap
-            inGap = true;
-            gapStart = y;
-          } else if (!white && inGap) {
-            // End of gap
-            inGap = false;
-            const gapSize = y - gapStart;
-            // Only count gaps that are at least 1px and less than 20% of image height
-            if (gapSize >= 1 && gapSize < height * 0.2) {
-              gaps.add(gapSize);
-            }
-          }
-        }
-      }
-      return gaps;
-    };
-
-    const vGaps = detectVerticalGaps();
-    const hGaps = detectHorizontalGaps();
-
-    // Find the most common gap size (mode)
-    const allGaps = [...vGaps, ...hGaps];
-    if (allGaps.length === 0) return 0;
-
-    // Count frequency of each gap size (rounding to nearest 2px to account for scaling artifacts)
-    const frequency = new Map<number, number>();
-    for (const gap of allGaps) {
-      const rounded = Math.round(gap / 2) * 2;
-      frequency.set(rounded, (frequency.get(rounded) || 0) + 1);
+      return;
     }
 
-    // Find the most frequent gap size
-    let maxFreq = 0;
-    let mostCommonGap = 0;
-    for (const [size, freq] of frequency) {
-      if (freq > maxFreq) {
-        maxFreq = freq;
-        mostCommonGap = size;
-      }
-    }
+    let detectWorker: Worker | null = null;
+    let cropWorker: Worker | null = null;
 
-    // Scale back to original image dimensions
-    return Math.round(mostCommonGap / scale);
-  };
+    try {
+      detectWorker = new Worker(
+        new URL("../workers/detectPadding.worker.ts", import.meta.url),
+        { type: "module" },
+      );
+      cropWorker = new Worker(
+        new URL("../workers/cropImage.worker.ts", import.meta.url),
+        { type: "module" },
+      );
 
-  const cropImage = (
-    img: HTMLImageElement,
-    cols: number,
-    rows: number,
-    padding: number = 0,
-  ): string[] => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return [];
-
-    const W = img.width;
-    const H = img.height;
-    const crops: string[] = [];
-    const totalCrops = cols * rows;
-
-    // Calculate cell dimensions without padding
-    // The grid has (cols + 1) vertical padding strips and (rows + 1) horizontal
-    // But the outer edge may or may not have padding, so we calculate based on total space
-    const cellWidth = (W - padding * (cols - 1)) / cols;
-    const cellHeight = (H - padding * (rows - 1)) / rows;
-
-    for (let i = 0; i < totalCrops; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-
-      // Calculate position accounting for padding between cells
-      const x = col * (cellWidth + padding);
-      const y = row * (cellHeight + padding);
-
-      const quad = {
-        x,
-        y,
-        w: cellWidth,
-        h: cellHeight,
+      // Handle worker errors
+      detectWorker.onerror = (error) => {
+        console.error("Detect padding worker error:", error);
+        setWorkerError("Padding detection worker failed");
       };
 
-      canvas.width = quad.w;
-      canvas.height = quad.h;
-      ctx.drawImage(img, quad.x, quad.y, quad.w, quad.h, 0, 0, quad.w, quad.h);
-      crops.push(canvas.toDataURL());
+      cropWorker.onerror = (error) => {
+        console.error("Crop image worker error:", error);
+        setWorkerError("Crop image worker failed");
+      };
+
+      detectPaddingWorker.current = detectWorker;
+      cropImageWorker.current = cropWorker;
+    } catch (error) {
+      console.error("Worker initialization failed:", error);
+      setWorkerError(
+        "Failed to initialize workers. OffscreenCanvas may not be supported.",
+      );
     }
 
-    return crops;
-  };
+    return () => {
+      detectWorker?.terminate();
+      cropWorker?.terminate();
+    };
+  }, []);
 
   // Auto-detect padding when image or auto-padding setting changes
   useEffect(() => {
-    if (originalImage && autoPadding) {
-      const detectedSize = detectPadding(originalImage);
-      setPaddingInfo({ size: detectedSize, detected: true });
-    } else {
-      setPaddingInfo({ size: 0, detected: false });
-    }
-  }, [originalImage, autoPadding, detectPadding]);
+    let mounted = true;
+
+    const detectPaddingAsync = async () => {
+      if (originalImage && autoPadding && detectPaddingWorker.current) {
+        try {
+          setIsProcessing(true);
+          const detectedSize = await detectPaddingWithWorker(originalImage);
+          if (mounted) {
+            setPaddingInfo({ size: detectedSize, detected: true });
+          }
+        } catch (error) {
+          if (mounted) {
+            console.error("Padding detection failed:", error);
+            setWorkerError(
+              error instanceof Error ? error.message : "Unknown error",
+            );
+            setPaddingInfo({ size: 0, detected: false });
+          }
+        } finally {
+          if (mounted) {
+            setIsProcessing(false);
+          }
+        }
+      } else {
+        setPaddingInfo({ size: 0, detected: false });
+      }
+    };
+
+    detectPaddingAsync();
+
+    return () => {
+      mounted = false;
+    };
+  }, [originalImage, autoPadding, detectPaddingWithWorker]);
 
   useEffect(() => {
-    if (originalImage) {
-      const padding = autoPadding ? paddingInfo.size : 0;
-      const crops = cropImage(originalImage, columns, rows, padding);
-      setCroppedImages(crops);
-      setCroppedDataURLs(crops);
-    }
-  }, [originalImage, columns, rows, cropImage, autoPadding, paddingInfo.size]);
+    let mounted = true;
+
+    const cropImageAsync = async () => {
+      // Wait for padding detection to complete if autoPadding is enabled
+      if (autoPadding && !paddingInfo.detected) {
+        return;
+      }
+
+      if (originalImage && cropImageWorker.current) {
+        try {
+          setIsProcessing(true);
+          const padding = autoPadding ? paddingInfo.size : 0;
+          const crops = await cropImageWithWorker(
+            originalImage,
+            columns,
+            rows,
+            padding,
+          );
+          if (mounted) {
+            setCroppedImages(crops);
+            setCroppedDataURLs(crops);
+          }
+        } catch (error) {
+          if (mounted) {
+            console.error("Image cropping failed:", error);
+            setWorkerError(
+              error instanceof Error ? error.message : "Unknown error",
+            );
+          }
+        } finally {
+          if (mounted) {
+            setIsProcessing(false);
+          }
+        }
+      }
+    };
+
+    cropImageAsync();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    originalImage,
+    columns,
+    rows,
+    autoPadding,
+    paddingInfo.size,
+    paddingInfo.detected,
+    cropImageWithWorker,
+  ]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -384,6 +463,20 @@ export function GridTool({ onUseImage }: GridToolProps) {
           </label>
         </div>
       </div>
+
+      {/* Worker Error Display */}
+      {workerError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <p className="text-sm font-semibold">Worker Error:</p>
+          <p className="text-xs">{workerError}</p>
+          <button
+            onClick={() => setWorkerError(null)}
+            className="mt-2 text-xs underline hover:text-red-900"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {isProcessing && (
         <div className="text-center py-12">
